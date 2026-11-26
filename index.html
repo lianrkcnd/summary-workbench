@@ -168,9 +168,10 @@ const state = {
   view:'list',               // list | reader
   reading:null,              // {report, tab:'pdf'|'summary'}
 };
-let LIB = null;              // 当前页数据（静态版来自 library.json）
-let PAGES = [];              // 页签信息（静态版来自 library.json）
-let DATA = null;             // 整站静态数据
+let LIB = null;              // 当前页数据（静态版 data-<页>.json）
+const STATIC_META = [{"id": "oil", "name": "油品工作台", "en": "Oil Products Workbench", "total": 121, "missing": null}, {"id": "macro", "name": "宏观报告工作台", "en": "Macro Workbench", "total": 53, "missing": null}];   // 页签信息（内联）
+let PAGES = [];
+let DATA = null;             // 当前页数据
 let searchSeq = 0;           // 防止乱序返回
 const ORG_COLORS = {'Platts':'#e8833a','FGE':'#0f8a6d','Energy Aspects':'#1e60a8','Kpler':'#7b46b4','JPM':'#b0455c','Morgan Stanley':'#1f3c63','GS':'#2e7d4f','Naphtha International':'#b3202c',
                     'Goldman Sachs':'#2e7d4f','J.P. Morgan':'#b0455c','瑞银证券':'#b3202c','Macquarie':'#7b46b4','Societe Generale':'#1e60a8','RBC Capital Markets':'#a56b3b','HSBC':'#3b6ea5','Bernstein':'#0f8a6d'};
@@ -200,22 +201,18 @@ function hl(text, q){
 }
 
 /* ============ 数据 ============ */
-async function fetchPages(){
-  try{
-    const r = await fetch('library.json');
-    DATA = await r.json();
-    PAGES = DATA.pagesMeta;
-    renderPageTabs();
-  }catch(e){}
-}
+async function fetchPages(){ PAGES = STATIC_META; renderPageTabs(); }
 async function fetchLibrary(){
-  if(!DATA) await fetchPages();
-  LIB = DATA.pages[state.page];
-  if(LIB.error){                       // 页不存在（配置改过）时回落到第一页
-    state.page = (PAGES[0] && PAGES[0].id) || 'oil';
-    renderPageTabs();
-    return fetchLibrary();
+  if(!DATA || DATA.page!==state.page){
+    try{
+      const r = await fetch('data-'+state.page+'.json');
+      DATA = await r.json();
+    }catch(e){
+      $('#main').innerHTML = '<div class="tipbox">在线数据加载失败（网络不稳定）。<button class="hbtn" onclick="fetchLibrary()">重试</button> 或稍后点右上角「刷新」。</div>';
+      return;
+    }
   }
+  LIB = DATA;
   renderLatest();
   renderTree();
   if(state.view==='list') renderList();
@@ -280,7 +277,7 @@ async function fetchSearch(){
   const seq = ++searchSeq;
   const q = state.q.trim().toLowerCase();
   const results = [];
-  const page = DATA.pages[state.page];
+  const page = (DATA && DATA.page===state.page) ? DATA : null;
   for(const src of (page?page.reports:[])){
     if(state.cls && (src.cls||'Others')!==state.cls) continue;
     if(state.org && src.org!==state.org) continue;
